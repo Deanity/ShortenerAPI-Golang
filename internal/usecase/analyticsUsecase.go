@@ -8,24 +8,50 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"shortenerapi/internal/domain"
+	"shortenerapi/pkg/cache"
 )
 
 type analyticsUseCase struct {
 	analyticsRepo domain.AnalyticsRepository
+	linkRepo      domain.LinkRepository
+	linkCache     *cache.LinkCache
 }
 
-func NewAnalyticsUseCase(analyticsRepo domain.AnalyticsRepository) domain.AnalyticsUseCase {
+func NewAnalyticsUseCase(
+	analyticsRepo domain.AnalyticsRepository,
+	linkRepo domain.LinkRepository,
+	linkCache *cache.LinkCache,
+) domain.AnalyticsUseCase {
 	return &analyticsUseCase{
 		analyticsRepo: analyticsRepo,
+		linkRepo:      linkRepo,
+		linkCache:     linkCache,
 	}
 }
 
 func (u *analyticsUseCase) TrackClick(ctx context.Context, event *domain.AnalyticsEvent) error {
+	// 1. Determine uniqueness using Redis cache
+	isUnique := false
+	if u.linkCache != nil {
+		if unique, err := u.linkCache.IsUniqueVisitor(ctx, event.ShortCode, event.IPAddress); err == nil {
+			isUnique = unique
+		}
+	}
+	event.IsUnique = isUnique
+
+	// 2. Increment click counts in MongoDB
+	_ = u.linkRepo.IncrementClickCount(ctx, event.ShortCode)
+	if isUnique {
+		_ = u.linkRepo.IncrementUniqueClickCount(ctx, event.ShortCode)
+	}
+
+	// 3. Save the event
 	if err := u.analyticsRepo.Insert(ctx, event); err != nil {
 		return fmt.Errorf("trackClick: %w", err)
 	}
 	return nil
 }
+
 
 func (u *analyticsUseCase) GetAnalytics(ctx context.Context, linkID primitive.ObjectID) (*domain.LinkAnalytics, error) {
 	stats, err := u.analyticsRepo.GetStats(ctx, linkID)

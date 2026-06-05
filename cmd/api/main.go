@@ -60,7 +60,7 @@ func main() {
 	// Wire use cases
 	authUseCase := usecase.NewAuthUseCase(userRepo, cfg.AppSecretKey)
 	linkUseCase := usecase.NewLinkUseCase(linkRepo, analyticsRepo, linkCache, cfg.GoogleSafeBrowsingAPIKey)
-	analyticsUseCase := usecase.NewAnalyticsUseCase(analyticsRepo)
+	analyticsUseCase := usecase.NewAnalyticsUseCase(analyticsRepo, linkRepo, linkCache)
 
 	// Wire handlers
 	linkHandler := handler.NewLinkHandler(linkUseCase)

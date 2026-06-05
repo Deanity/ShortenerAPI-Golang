@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"shortenerapi/internal/domain"
 	"shortenerapi/pkg/utils"
@@ -45,6 +44,8 @@ func (h *RedirectHandler) Redirect(c *fiber.Ctx) error {
 			return utils.Error(c, fiber.StatusGone, "This link has expired", "LINK_EXPIRED")
 		case domain.ErrClickLimitReached:
 			return utils.Error(c, fiber.StatusGone, "This link has reached its click limit", "CLICK_LIMIT_REACHED")
+		case domain.ErrPasswordRequired:
+			return utils.Error(c, fiber.StatusUnauthorized, "Password required for this link", "PASSWORD_REQUIRED")
 		default:
 			return utils.Error(c, fiber.StatusInternalServerError, "Redirect failed", "REDIRECT_FAILED")
 		}
@@ -57,10 +58,7 @@ func (h *RedirectHandler) Redirect(c *fiber.Ctx) error {
 }
 
 func (h *RedirectHandler) Unlock(c *fiber.Ctx) error {
-	id, err := primitive.ObjectIDFromHex(c.Params("shortCode"))
-	if err != nil {
-		return utils.Error(c, fiber.StatusBadRequest, "Invalid link ID", "INVALID_ID")
-	}
+	shortCode := c.Params("shortCode")
 
 	var req unlockRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -70,7 +68,7 @@ func (h *RedirectHandler) Unlock(c *fiber.Ctx) error {
 		return utils.Error(c, fiber.StatusBadRequest, "Password is required", "MISSING_PASSWORD")
 	}
 
-	ok, err := h.linkUseCase.UnlockLink(c.Context(), id, req.Password)
+	originalURL, err := h.linkUseCase.UnlockLink(c.Context(), shortCode, req.Password)
 	if err != nil {
 		switch err {
 		case domain.ErrLinkNotFound:
@@ -82,7 +80,10 @@ func (h *RedirectHandler) Unlock(c *fiber.Ctx) error {
 		}
 	}
 
-	return utils.Success(c, fiber.StatusOK, "Link unlocked", fiber.Map{"unlocked": ok})
+	return utils.Success(c, fiber.StatusOK, "Link unlocked", fiber.Map{
+		"unlocked":     true,
+		"original_url": originalURL,
+	})
 }
 
 // trackClickAsync records an analytics event in the background.

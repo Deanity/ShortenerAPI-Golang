@@ -72,6 +72,8 @@ func (h *LinkHandler) Shorten(c *fiber.Ctx) error {
 		switch err {
 		case domain.ErrSlugTaken:
 			return utils.Error(c, fiber.StatusConflict, "Slug already taken", "SLUG_TAKEN")
+		case domain.ErrUnsafeURL:
+			return utils.Error(c, fiber.StatusUnprocessableEntity, "URL flagged as unsafe by Safe Browsing", "UNSAFE_URL")
 		default:
 			return utils.Error(c, fiber.StatusInternalServerError, "Failed to create link", "CREATE_FAILED")
 		}

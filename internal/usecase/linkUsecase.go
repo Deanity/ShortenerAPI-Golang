@@ -52,7 +52,7 @@ func (u *linkUseCase) Shorten(ctx context.Context, userID primitive.ObjectID, or
 		_ = err
 	}
 	if !safe {
-		return nil, fmt.Errorf("shorten: URL flagged as unsafe by Safe Browsing")
+		return nil, domain.ErrUnsafeURL
 	}
 
 	// Determine slug
@@ -118,8 +118,8 @@ func (u *linkUseCase) Shorten(ctx context.Context, userID primitive.ObjectID, or
 		return nil, fmt.Errorf("shorten: create link: %w", err)
 	}
 
-	// Warm up Redis cache immediately after creation
-	if u.linkCache != nil {
+	// Warm up Redis cache immediately after creation (only if no special validation constraints exist)
+	if u.linkCache != nil && link.PasswordHash == nil && link.ExpiresAt == nil && link.ClickLimit == nil {
 		_ = u.linkCache.SetLink(ctx, shortCode, originalURL)
 	}
 
@@ -158,6 +158,22 @@ func (u *linkUseCase) ResolveRedirect(ctx context.Context, shortCode string, dom
 				// Cache hit but DB miss (deleted?) — evict cache and return 404
 				_ = u.linkCache.DeleteLink(ctx, shortCode)
 				return "", nil, domain.ErrLinkNotFound
+			}
+			// Perform validations even on cache hits
+			if !link.IsActive {
+				_ = u.linkCache.DeleteLink(ctx, shortCode)
+				return "", nil, domain.ErrLinkNotFound
+			}
+			if link.ExpiresAt != nil && time.Now().After(*link.ExpiresAt) {
+				_ = u.linkCache.DeleteLink(ctx, shortCode)
+				return "", nil, domain.ErrLinkExpired
+			}
+			if link.ClickLimit != nil && link.ClickCount >= *link.ClickLimit {
+				_ = u.linkCache.DeleteLink(ctx, shortCode)
+				return "", nil, domain.ErrClickLimitReached
+			}
+			if link.PasswordHash != nil {
+				return "", nil, domain.ErrPasswordRequired
 			}
 			return cached, link, nil
 		}
@@ -266,16 +282,16 @@ func (u *linkUseCase) ListLinks(ctx context.Context, userID primitive.ObjectID, 
 	return u.linkRepo.List(ctx, userID, filter, page, perPage)
 }
 
-func (u *linkUseCase) UnlockLink(ctx context.Context, id primitive.ObjectID, password string) (bool, error) {
-	link, err := u.linkRepo.GetByID(ctx, id)
+func (u *linkUseCase) UnlockLink(ctx context.Context, shortCode string, password string) (string, error) {
+	link, err := u.linkRepo.GetByShortCode(ctx, shortCode)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	if link.PasswordHash == nil {
-		return true, nil
+		return link.OriginalURL, nil
 	}
 	if !utils.CheckPassword(password, *link.PasswordHash) {
-		return false, domain.ErrInvalidPassword
+		return "", domain.ErrInvalidPassword
 	}
-	return true, nil
+	return link.OriginalURL, nil
 }

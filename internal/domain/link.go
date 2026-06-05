@@ -76,5 +76,5 @@ type LinkUseCase interface {
 	UpdateLink(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, updates map[string]interface{}) (*Link, error)
 	DeleteLink(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
 	ListLinks(ctx context.Context, userID primitive.ObjectID, tag string, isActive *bool, page, perPage int) ([]*Link, int, error)
-	UnlockLink(ctx context.Context, id primitive.ObjectID, password string) (bool, error)
+	UnlockLink(ctx context.Context, shortCode string, password string) (string, error)
 }
