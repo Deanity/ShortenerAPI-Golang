@@ -95,5 +95,4 @@ docker-compose.override.yml
 *.tmp
 
 # Gemini MD
-.gemini.md
 GEMINI.md
