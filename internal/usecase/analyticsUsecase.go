@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
@@ -31,22 +32,18 @@ func (u *analyticsUseCase) GetAnalytics(ctx context.Context, linkID primitive.Ob
 	if err != nil {
 		return nil, fmt.Errorf("getAnalytics: stats: %w", err)
 	}
-
 	geo, err := u.analyticsRepo.GetGeoAnalytics(ctx, linkID)
 	if err != nil {
 		return nil, fmt.Errorf("getAnalytics: geo: %w", err)
 	}
-
 	devices, err := u.analyticsRepo.GetDeviceAnalytics(ctx, linkID)
 	if err != nil {
 		return nil, fmt.Errorf("getAnalytics: devices: %w", err)
 	}
-
 	referrers, err := u.analyticsRepo.GetReferrerAnalytics(ctx, linkID)
 	if err != nil {
 		return nil, fmt.Errorf("getAnalytics: referrers: %w", err)
 	}
-
 	return &domain.LinkAnalytics{
 		Stats:     *stats,
 		Geo:       geo,
@@ -54,4 +51,20 @@ func (u *analyticsUseCase) GetAnalytics(ctx context.Context, linkID primitive.Ob
 		Referrers: referrers,
 		History:   []domain.TimeSeriesData{},
 	}, nil
+}
+
+func (u *analyticsUseCase) GetGeoAnalytics(ctx context.Context, linkID primitive.ObjectID) ([]domain.GeoBreakdown, error) {
+	return u.analyticsRepo.GetGeoAnalytics(ctx, linkID)
+}
+
+func (u *analyticsUseCase) GetDeviceAnalytics(ctx context.Context, linkID primitive.ObjectID) ([]domain.DeviceBreakdown, error) {
+	return u.analyticsRepo.GetDeviceAnalytics(ctx, linkID)
+}
+
+func (u *analyticsUseCase) GetReferrerAnalytics(ctx context.Context, linkID primitive.ObjectID) ([]domain.ReferrerBreakdown, error) {
+	return u.analyticsRepo.GetReferrerAnalytics(ctx, linkID)
+}
+
+func (u *analyticsUseCase) GetTimeSeriesAnalytics(ctx context.Context, linkID primitive.ObjectID, start, end time.Time, interval string) ([]domain.TimeSeriesData, error) {
+	return u.analyticsRepo.GetTimeSeriesAnalytics(ctx, linkID, start, end, interval)
 }

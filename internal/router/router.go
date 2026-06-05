@@ -13,6 +13,8 @@ func SetupRoutes(
 	redirectHandler *handler.RedirectHandler,
 	authHandler *handler.AuthHandler,
 	authMiddleware fiber.Handler,
+	rateLimitMiddleware fiber.Handler,
+	redirectRateLimitMiddleware fiber.Handler,
 ) {
 	// Health check (public)
 	app.Get("/healthz", func(c *fiber.Ctx) error {
@@ -22,8 +24,8 @@ func SetupRoutes(
 		})
 	})
 
-	// Public redirect
-	app.Get("/:shortCode", redirectHandler.Redirect)
+	// Public redirect (with per-IP rate limit)
+	app.Get("/:shortCode", redirectRateLimitMiddleware, redirectHandler.Redirect)
 	app.Post("/:shortCode/unlock", redirectHandler.Unlock)
 
 	// API Group
@@ -34,14 +36,14 @@ func SetupRoutes(
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 
-	// API Key routes (requires auth)
-	authKeys := auth.Group("/keys", authMiddleware)
+	// API Key routes (requires auth + rate limit)
+	authKeys := auth.Group("/keys", authMiddleware, rateLimitMiddleware)
 	authKeys.Get("", authHandler.ListAPIKeys)
 	authKeys.Post("", authHandler.CreateAPIKey)
 	authKeys.Delete("", authHandler.DeleteAPIKey)
 
-	// Link routes (requires auth)
-	links := api.Group("/links", authMiddleware)
+	// Link routes (requires auth + rate limit)
+	links := api.Group("/links", authMiddleware, rateLimitMiddleware)
 	links.Post("", linkHandler.Shorten)
 	links.Post("/bulk", linkHandler.BulkShorten)
 	links.Get("", linkHandler.List)
@@ -49,6 +51,10 @@ func SetupRoutes(
 	links.Put("/:id", linkHandler.Update)
 	links.Delete("/:id", linkHandler.Delete)
 
-	// Analytics routes (requires auth)
+	// Analytics routes (requires auth + rate limit)
 	links.Get("/:id/analytics", analyticsHandler.GetAnalytics)
+	links.Get("/:id/analytics/geo", analyticsHandler.GetGeoAnalytics)
+	links.Get("/:id/analytics/devices", analyticsHandler.GetDeviceAnalytics)
+	links.Get("/:id/analytics/referrers", analyticsHandler.GetReferrerAnalytics)
+	links.Get("/:id/analytics/timeseries", analyticsHandler.GetTimeSeriesAnalytics)
 }

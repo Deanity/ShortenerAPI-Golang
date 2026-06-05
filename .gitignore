@@ -93,3 +93,7 @@ docker-compose.override.yml
 *.swo
 *.bak
 *.tmp
+
+# Gemini MD
+.gemini.md
+GEMINI.md

@@ -73,4 +73,8 @@ type AnalyticsRepository interface {
 type AnalyticsUseCase interface {
 	TrackClick(ctx context.Context, event *AnalyticsEvent) error
 	GetAnalytics(ctx context.Context, linkID primitive.ObjectID) (*LinkAnalytics, error)
+	GetGeoAnalytics(ctx context.Context, linkID primitive.ObjectID) ([]GeoBreakdown, error)
+	GetDeviceAnalytics(ctx context.Context, linkID primitive.ObjectID) ([]DeviceBreakdown, error)
+	GetReferrerAnalytics(ctx context.Context, linkID primitive.ObjectID) ([]ReferrerBreakdown, error)
+	GetTimeSeriesAnalytics(ctx context.Context, linkID primitive.ObjectID, start, end time.Time, interval string) ([]TimeSeriesData, error)
 }

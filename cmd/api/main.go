@@ -12,16 +12,15 @@ import (
 	"shortenerapi/internal/repository"
 	"shortenerapi/internal/router"
 	"shortenerapi/internal/usecase"
+	"shortenerapi/pkg/cache"
 	"shortenerapi/pkg/config"
 	"shortenerapi/pkg/database"
 )
 
 func main() {
-	// Initialize logger
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Info().Msg("Starting ShortenerAPI server...")
 
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load configuration")
@@ -49,7 +48,9 @@ func main() {
 	}
 	defer redisClient.Close()
 	log.Info().Msg("Connected to Redis successfully")
-	_ = redisClient // will be used for caching & rate limiting in later phases
+
+	// Initialize cache layer
+	linkCache := cache.NewLinkCache(redisClient)
 
 	// Wire repositories
 	linkRepo := repository.NewLinkRepository(db)
@@ -58,7 +59,7 @@ func main() {
 
 	// Wire use cases
 	authUseCase := usecase.NewAuthUseCase(userRepo, cfg.AppSecretKey)
-	linkUseCase := usecase.NewLinkUseCase(linkRepo, analyticsRepo)
+	linkUseCase := usecase.NewLinkUseCase(linkRepo, analyticsRepo, linkCache, cfg.GoogleSafeBrowsingAPIKey)
 	analyticsUseCase := usecase.NewAnalyticsUseCase(analyticsRepo)
 
 	// Wire handlers
@@ -67,18 +68,32 @@ func main() {
 	redirectHandler := handler.NewRedirectHandler(linkUseCase, analyticsUseCase)
 	authHandler := handler.NewAuthHandler(authUseCase)
 
-	// Auth middleware
+	// Wire middleware
 	authMiddleware := middleware.NewAuthMiddleware(authUseCase)
+	rateLimitMiddleware := middleware.NewRateLimitMiddleware(linkCache, middleware.RateLimitConfig{
+		FreePlanLimit: cfg.RateLimitFree,
+		ProPlanLimit:  cfg.RateLimitPro,
+		RedirectLimit: cfg.RateLimitRedirect,
+	})
+	redirectRateLimitMiddleware := middleware.NewRedirectRateLimitMiddleware(linkCache, cfg.RateLimitRedirect)
 
-	// Initialize Fiber application
+	// Initialize Fiber
 	app := fiber.New(fiber.Config{
 		AppName: "ShortenerAPI",
 	})
 
 	// Setup routes
-	router.SetupRoutes(app, linkHandler, analyticsHandler, redirectHandler, authHandler, authMiddleware)
+	router.SetupRoutes(
+		app,
+		linkHandler,
+		analyticsHandler,
+		redirectHandler,
+		authHandler,
+		authMiddleware,
+		rateLimitMiddleware,
+		redirectRateLimitMiddleware,
+	)
 
-	// Start server
 	port := cfg.AppPort
 	if port == "" {
 		port = "8080"
