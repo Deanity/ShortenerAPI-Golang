@@ -15,13 +15,24 @@ func NewAuthMiddleware(authUseCase domain.AuthUseCase) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Try X-API-Key first
 		if apiKey := c.Get("X-API-Key"); apiKey != "" {
-			user, err := authUseCase.ValidateAPIKey(c.Context(), apiKey)
+			user, key, err := authUseCase.ValidateAPIKey(c.Context(), apiKey)
 			if err != nil {
 				return utils.Error(c, fiber.StatusUnauthorized, "Invalid API key", "INVALID_API_KEY")
 			}
+
+			// Enforce scoping
+			requiredScope := determineRequiredScope(c.Method(), c.Path())
+			if requiredScope != "" && key != nil {
+				if !hasScope(key.Scopes, requiredScope) {
+					return utils.Error(c, fiber.StatusForbidden, "API key has insufficient permissions", "INSUFFICIENT_PERMISSIONS")
+				}
+			}
+
 			c.Locals("user", user)
+			c.Locals("api_key", key)
 			return c.Next()
 		}
+
 
 		// Try Bearer token
 		authHeader := c.Get("Authorization")
@@ -43,3 +54,29 @@ func NewAuthMiddleware(authUseCase domain.AuthUseCase) fiber.Handler {
 		return c.Next()
 	}
 }
+
+func determineRequiredScope(method, path string) string {
+	if strings.Contains(path, "/analytics") {
+		return "analytics:read"
+	}
+	if strings.HasPrefix(path, "/api/v1/links") {
+		if method == "GET" {
+			return "links:read"
+		}
+		return "links:write"
+	}
+	return ""
+}
+
+func hasScope(scopes []string, required string) bool {
+	if len(scopes) == 0 {
+		return true // Default to unrestricted key (backward compatibility)
+	}
+	for _, s := range scopes {
+		if s == "*" || s == required {
+			return true
+		}
+	}
+	return false
+}
+

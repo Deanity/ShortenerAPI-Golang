@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
@@ -16,6 +17,7 @@ import (
 	"shortenerapi/pkg/config"
 	"shortenerapi/pkg/database"
 )
+
 
 func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
@@ -57,15 +59,20 @@ func main() {
 	analyticsRepo := repository.NewAnalyticsRepository(db)
 	userRepo := repository.NewUserRepository(db)
 
+	mainHost := "localhost"
+	if u, err := url.Parse(cfg.AppBaseURL); err == nil && u.Host != "" {
+		mainHost = u.Hostname()
+	}
+
 	// Wire use cases
 	authUseCase := usecase.NewAuthUseCase(userRepo, cfg.AppSecretKey)
-	linkUseCase := usecase.NewLinkUseCase(linkRepo, analyticsRepo, linkCache, cfg.GoogleSafeBrowsingAPIKey)
+	linkUseCase := usecase.NewLinkUseCase(linkRepo, analyticsRepo, userRepo, linkCache, cfg.GoogleSafeBrowsingAPIKey, mainHost)
 	analyticsUseCase := usecase.NewAnalyticsUseCase(analyticsRepo, linkRepo, linkCache)
 
 	// Wire handlers
 	linkHandler := handler.NewLinkHandler(linkUseCase)
 	analyticsHandler := handler.NewAnalyticsHandler(analyticsUseCase)
-	redirectHandler := handler.NewRedirectHandler(linkUseCase, analyticsUseCase)
+	redirectHandler := handler.NewRedirectHandler(linkUseCase, analyticsUseCase, cfg.WebhookMaxRetries, cfg.WebhookTimeoutSeconds)
 	authHandler := handler.NewAuthHandler(authUseCase)
 
 	// Wire middleware
@@ -81,6 +88,10 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName: "ShortenerAPI",
 	})
+
+	// Global SSL and HSTS enforcement middleware
+	app.Use(middleware.NewSSLEnforcementMiddleware(cfg.AppEnv))
+
 
 	// Setup routes
 	router.SetupRoutes(

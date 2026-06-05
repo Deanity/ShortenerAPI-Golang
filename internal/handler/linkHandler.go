@@ -2,6 +2,7 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -10,6 +11,7 @@ import (
 	"shortenerapi/internal/domain"
 	"shortenerapi/pkg/utils"
 )
+
 
 type LinkHandler struct {
 	linkUseCase domain.LinkUseCase
@@ -22,13 +24,24 @@ func NewLinkHandler(linkUseCase domain.LinkUseCase) *LinkHandler {
 }
 
 type shortenRequest struct {
-	OriginalURL string     `json:"original_url"`
-	Slug        string     `json:"slug"`
-	Tags        []string   `json:"tags"`
-	WebhookURL  string     `json:"webhook_url"`
-	Password    string     `json:"password"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	ClickLimit  *int       `json:"click_limit"`
+	OriginalURL  string             `json:"original_url"`
+	Slug         string             `json:"slug"`
+	CustomDomain string             `json:"custom_domain"`
+	Tags         []string           `json:"tags"`
+	WebhookURL   string             `json:"webhook_url"`
+	Password     string             `json:"password"`
+	ExpiresAt    *time.Time         `json:"expires_at"`
+	ClickLimit   *int               `json:"click_limit"`
+	// ADV-1: Deep Linking
+	DeepLink     *domain.DeepLink   `json:"deep_link"`
+	// ADV-2: Geo-Targeting
+	GeoRules     []domain.GeoRule   `json:"geo_rules"`
+	// ADV-3: Device Targeting
+	DeviceRules  []domain.DeviceRule `json:"device_rules"`
+	// ADV-4: Pixel Retargeting
+	Pixels       []domain.Pixel     `json:"pixels"`
+	// ADV-5: A/B Testing
+	ABVariants   []domain.ABVariant  `json:"ab_variants"`
 }
 
 type bulkShortenRequest struct {
@@ -36,13 +49,25 @@ type bulkShortenRequest struct {
 }
 
 type updateLinkRequest struct {
-	OriginalURL string     `json:"original_url"`
-	Tags        []string   `json:"tags"`
-	IsActive    *bool      `json:"is_active"`
-	WebhookURL  string     `json:"webhook_url"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	ClickLimit  *int       `json:"click_limit"`
+	OriginalURL  string             `json:"original_url"`
+	CustomDomain string             `json:"custom_domain"`
+	Tags         []string           `json:"tags"`
+	IsActive     *bool              `json:"is_active"`
+	WebhookURL   string             `json:"webhook_url"`
+	ExpiresAt    *time.Time         `json:"expires_at"`
+	ClickLimit   *int               `json:"click_limit"`
+	// ADV-1: Deep Linking
+	DeepLink     *domain.DeepLink   `json:"deep_link"`
+	// ADV-2: Geo-Targeting
+	GeoRules     []domain.GeoRule   `json:"geo_rules"`
+	// ADV-3: Device Targeting
+	DeviceRules  []domain.DeviceRule `json:"device_rules"`
+	// ADV-4: Pixel Retargeting
+	Pixels       []domain.Pixel     `json:"pixels"`
+	// ADV-5: A/B Testing
+	ABVariants   []domain.ABVariant  `json:"ab_variants"`
 }
+
 
 func (h *LinkHandler) Shorten(c *fiber.Ctx) error {
 	user, ok := c.Locals("user").(*domain.User)
@@ -59,12 +84,18 @@ func (h *LinkHandler) Shorten(c *fiber.Ctx) error {
 	}
 
 	options := map[string]interface{}{
-		"slug":        req.Slug,
-		"tags":        req.Tags,
-		"webhook_url": req.WebhookURL,
-		"password":    req.Password,
-		"expires_at":  req.ExpiresAt,
-		"click_limit": req.ClickLimit,
+		"slug":          req.Slug,
+		"custom_domain": req.CustomDomain,
+		"tags":          req.Tags,
+		"webhook_url":   req.WebhookURL,
+		"password":      req.Password,
+		"expires_at":    req.ExpiresAt,
+		"click_limit":   req.ClickLimit,
+		"deep_link":     req.DeepLink,
+		"geo_rules":     req.GeoRules,
+		"device_rules":  req.DeviceRules,
+		"pixels":        req.Pixels,
+		"ab_variants":   req.ABVariants,
 	}
 
 	link, err := h.linkUseCase.Shorten(c.Context(), user.ID, req.OriginalURL, options)
@@ -72,8 +103,11 @@ func (h *LinkHandler) Shorten(c *fiber.Ctx) error {
 		switch err {
 		case domain.ErrSlugTaken:
 			return utils.Error(c, fiber.StatusConflict, "Slug already taken", "SLUG_TAKEN")
+		case domain.ErrCustomDomainNotOwned:
+			return utils.Error(c, fiber.StatusForbidden, "Custom domain not registered on your account", "CUSTOM_DOMAIN_NOT_OWNED")
 		case domain.ErrUnsafeURL:
 			return utils.Error(c, fiber.StatusUnprocessableEntity, "URL flagged as unsafe by Safe Browsing", "UNSAFE_URL")
+
 		default:
 			return utils.Error(c, fiber.StatusInternalServerError, "Failed to create link", "CREATE_FAILED")
 		}
@@ -148,6 +182,9 @@ func (h *LinkHandler) Update(c *fiber.Ctx) error {
 	}
 
 	updates := map[string]interface{}{}
+	if strings.Contains(string(c.Body()), `"custom_domain"`) {
+		updates["custom_domain"] = req.CustomDomain
+	}
 	if req.OriginalURL != "" {
 		updates["original_url"] = req.OriginalURL
 	}
@@ -166,14 +203,32 @@ func (h *LinkHandler) Update(c *fiber.Ctx) error {
 	if req.ClickLimit != nil {
 		updates["click_limit"] = req.ClickLimit
 	}
+	if req.DeepLink != nil {
+		updates["deep_link"] = req.DeepLink
+	}
+	if req.GeoRules != nil {
+		updates["geo_rules"] = req.GeoRules
+	}
+	if req.DeviceRules != nil {
+		updates["device_rules"] = req.DeviceRules
+	}
+	if req.Pixels != nil {
+		updates["pixels"] = req.Pixels
+	}
+	if req.ABVariants != nil {
+		updates["ab_variants"] = req.ABVariants
+	}
 
 	link, err := h.linkUseCase.UpdateLink(c.Context(), id, user.ID, updates)
 	if err != nil {
 		switch err {
 		case domain.ErrLinkNotFound:
 			return utils.Error(c, fiber.StatusNotFound, "Link not found", "LINK_NOT_FOUND")
+		case domain.ErrCustomDomainNotOwned:
+			return utils.Error(c, fiber.StatusForbidden, "Custom domain not registered on your account", "CUSTOM_DOMAIN_NOT_OWNED")
 		case domain.ErrUnauthorized:
 			return utils.Error(c, fiber.StatusForbidden, "You do not own this link", "FORBIDDEN")
+
 		default:
 			return utils.Error(c, fiber.StatusInternalServerError, "Failed to update link", "UPDATE_FAILED")
 		}

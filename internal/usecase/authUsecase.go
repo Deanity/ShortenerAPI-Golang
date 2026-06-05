@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -14,6 +15,7 @@ import (
 	"shortenerapi/internal/domain"
 	"shortenerapi/pkg/utils"
 )
+
 
 type authUseCase struct {
 	userRepo  domain.UserRepository
@@ -110,16 +112,25 @@ func (u *authUseCase) ValidateToken(ctx context.Context, tokenStr string) (*doma
 	return user, nil
 }
 
-func (u *authUseCase) ValidateAPIKey(ctx context.Context, apiKey string) (*domain.User, error) {
+func (u *authUseCase) ValidateAPIKey(ctx context.Context, apiKey string) (*domain.User, *domain.APIKey, error) {
 	hash := hashAPIKey(apiKey)
 	user, err := u.userRepo.GetByAPIKeyHash(ctx, hash)
 	if err != nil {
-		return nil, domain.ErrUnauthorized
+		return nil, nil, domain.ErrUnauthorized
 	}
-	return user, nil
+
+	var matchedKey *domain.APIKey
+	for _, k := range user.APIKeys {
+		if k.KeyHash == hash {
+			matchedKey = &k
+			break
+		}
+	}
+
+	return user, matchedKey, nil
 }
 
-func (u *authUseCase) CreateAPIKey(ctx context.Context, userID primitive.ObjectID, label string) (string, error) {
+func (u *authUseCase) CreateAPIKey(ctx context.Context, userID primitive.ObjectID, label string, scopes []string, teamID *string) (string, error) {
 	// Generate 32 random bytes → hex string (64 chars)
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -131,6 +142,8 @@ func (u *authUseCase) CreateAPIKey(ctx context.Context, userID primitive.ObjectI
 	apiKey := domain.APIKey{
 		KeyHash:   keyHash,
 		Label:     label,
+		Scopes:    scopes,
+		TeamID:    teamID,
 		CreatedAt: time.Now(),
 	}
 
@@ -140,6 +153,7 @@ func (u *authUseCase) CreateAPIKey(ctx context.Context, userID primitive.ObjectI
 
 	return plaintext, nil
 }
+
 
 func (u *authUseCase) RevokeAPIKey(ctx context.Context, userID primitive.ObjectID, label string) error {
 	user, err := u.userRepo.GetByID(ctx, userID)
@@ -187,3 +201,46 @@ func hashAPIKey(key string) string {
 	h := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(h[:])
 }
+
+func (u *authUseCase) AddCustomDomain(ctx context.Context, userID primitive.ObjectID, domainName string) error {
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// Check if already exists
+	for _, d := range user.CustomDomains {
+		if strings.EqualFold(d, domainName) {
+			return nil // already exists, noop
+		}
+	}
+
+	user.CustomDomains = append(user.CustomDomains, domainName)
+	return u.userRepo.Update(ctx, user)
+}
+
+func (u *authUseCase) DeleteCustomDomain(ctx context.Context, userID primitive.ObjectID, domainName string) error {
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	updatedDomains := make([]string, 0, len(user.CustomDomains))
+	for _, d := range user.CustomDomains {
+		if !strings.EqualFold(d, domainName) {
+			updatedDomains = append(updatedDomains, d)
+		}
+	}
+
+	user.CustomDomains = updatedDomains
+	return u.userRepo.Update(ctx, user)
+}
+
+func (u *authUseCase) ListCustomDomains(ctx context.Context, userID primitive.ObjectID) ([]string, error) {
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return user.CustomDomains, nil
+}
+

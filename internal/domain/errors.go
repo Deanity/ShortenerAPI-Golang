@@ -16,5 +16,6 @@ var (
 	ErrPasswordRequired  = errors.New("password required for this link")
 	ErrInvalidPassword   = errors.New("invalid password for link")
 	ErrUnsafeURL         = errors.New("URL flagged as unsafe by Safe Browsing")
+	ErrCustomDomainNotOwned = errors.New("custom domain not owned by user")
 )
 

@@ -11,7 +11,9 @@ type AnalyticsEvent struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	LinkID       primitive.ObjectID `bson:"linkId" json:"link_id"`
 	ShortCode    string             `bson:"shortCode" json:"short_code"`
+	CustomDomain string             `bson:"customDomain,omitempty" json:"custom_domain,omitempty"`
 	ClickedAt    time.Time          `bson:"clickedAt" json:"clicked_at"`
+
 	IPAddress    string             `bson:"ipAddress" json:"ip_address"` // Hashed
 	Country      string             `bson:"country" json:"country"`
 	City         string             `bson:"city" json:"city"`

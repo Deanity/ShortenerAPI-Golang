@@ -33,7 +33,8 @@ func (u *analyticsUseCase) TrackClick(ctx context.Context, event *domain.Analyti
 	// 1. Determine uniqueness using Redis cache
 	isUnique := false
 	if u.linkCache != nil {
-		if unique, err := u.linkCache.IsUniqueVisitor(ctx, event.ShortCode, event.IPAddress); err == nil {
+		if unique, err := u.linkCache.IsUniqueVisitor(ctx, event.CustomDomain, event.ShortCode, event.IPAddress); err == nil {
+
 			isUnique = unique
 		}
 	}

@@ -10,6 +10,8 @@ import (
 type APIKey struct {
 	KeyHash   string    `bson:"keyHash" json:"-"`
 	Label     string    `bson:"label" json:"label"`
+	Scopes    []string  `bson:"scopes" json:"scopes"`
+	TeamID    *string   `bson:"teamId,omitempty" json:"team_id,omitempty"`
 	CreatedAt time.Time `bson:"createdAt" json:"created_at"`
 }
 
@@ -41,8 +43,13 @@ type AuthUseCase interface {
 	Register(ctx context.Context, name, email, password string) (*User, error)
 	Login(ctx context.Context, email, password string) (string, error) // Returns JWT token
 	ValidateToken(ctx context.Context, tokenStr string) (*User, error)
-	ValidateAPIKey(ctx context.Context, apiKey string) (*User, error)
-	CreateAPIKey(ctx context.Context, userID primitive.ObjectID, label string) (string, error) // Returns plaintext key
+	ValidateAPIKey(ctx context.Context, apiKey string) (*User, *APIKey, error)
+	CreateAPIKey(ctx context.Context, userID primitive.ObjectID, label string, scopes []string, teamID *string) (string, error) // Returns plaintext key
 	RevokeAPIKey(ctx context.Context, userID primitive.ObjectID, label string) error
 	ListAPIKeys(ctx context.Context, userID primitive.ObjectID) ([]APIKey, error)
+	AddCustomDomain(ctx context.Context, userID primitive.ObjectID, domain string) error
+	DeleteCustomDomain(ctx context.Context, userID primitive.ObjectID, domain string) error
+	ListCustomDomains(ctx context.Context, userID primitive.ObjectID) ([]string, error)
 }
+
+

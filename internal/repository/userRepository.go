@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -11,6 +12,7 @@ import (
 
 	"shortenerapi/internal/domain"
 )
+
 
 type userRepository struct {
 	db *mongo.Database
@@ -82,8 +84,20 @@ func (r *userRepository) AddAPIKey(ctx context.Context, userID primitive.ObjectI
 			"$set":  bson.M{"updatedAt": time.Now()},
 		},
 	)
+	if err != nil && strings.Contains(err.Error(), "must be an array but is of type null") {
+		_, err = r.col().UpdateOne(ctx,
+			bson.M{"_id": userID},
+			bson.M{
+				"$set": bson.M{
+					"apiKeys":   []domain.APIKey{apiKey},
+					"updatedAt": time.Now(),
+				},
+			},
+		)
+	}
 	return err
 }
+
 
 func (r *userRepository) DeleteAPIKey(ctx context.Context, userID primitive.ObjectID, keyHash string) error {
 	_, err := r.col().UpdateOne(ctx,

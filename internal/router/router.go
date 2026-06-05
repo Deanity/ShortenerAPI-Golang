@@ -42,6 +42,13 @@ func SetupRoutes(
 	authKeys.Post("", authHandler.CreateAPIKey)
 	authKeys.Delete("", authHandler.DeleteAPIKey)
 
+	// Custom Domain routes (requires auth + rate limit)
+	authDomains := auth.Group("/domains", authMiddleware, rateLimitMiddleware)
+	authDomains.Get("", authHandler.ListCustomDomains)
+	authDomains.Post("", authHandler.AddCustomDomain)
+	authDomains.Delete("", authHandler.DeleteCustomDomain)
+
+
 	// Link routes (requires auth + rate limit)
 	links := api.Group("/links", authMiddleware, rateLimitMiddleware)
 	links.Post("", linkHandler.Shorten)
